@@ -8,69 +8,41 @@ import torch
 import torch.nn as nn
 
 from CIFAR10Dataset import CIFAR10Dataset
+from Cells import NormalCell
+from EvaluateCellNetwork import evaluateCellNetwork
 from PlotUtils import plot_training_statistics, plot_history
+from time import time
 
 
 def main():
     os.chdir(os.path.dirname(sys.argv[0]))
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     save_path = f"EVOLUTIONEvaluation"
-    BEST_NETWORK = "network408.pkl"
-    with open(f"EvolutionNetworks/{BEST_NETWORK}", "rb") as net_file:
+    BEST_NETWORK = "Top0Net.pkl"
+    with open(f"EVOLUTIONBestNetworks/{BEST_NETWORK}", "rb") as net_file:
         network = pkl.load(net_file)
-    network.to(device)
 
-    train_dataset = CIFAR10Dataset(path="../CIFAR-10", train=True, device="cpu", quantity=100)
-    val_dataset = CIFAR10Dataset(path="../CIFAR-10", train=False, device="cpu", quantity=100)
+    # normal_cell = network.operationList[0].edge_operations
+    # reduction_cell = network.operationList[network.reduction_indices[0]].edge_operations
+    #
+    # del network
+    #
+    # EVALUATION_CELLS_NUM = 21
+    # REDUCTION_POS = [math.floor(EVALUATION_CELLS_NUM / 3), math.floor(EVALUATION_CELLS_NUM / 3 * 2)]
+    #
+    # first_block = [normal_cell] * REDUCTION_POS[0]
+    # second_block = [normal_cell] * REDUCTION_POS[0]
+    # last_block = [normal_cell] * (EVALUATION_CELLS_NUM - (2 * REDUCTION_POS[0]))
+    # new_cells_list = first_block + [reduction_cell] + second_block + [reduction_cell] + last_block
 
-    best_acc = 0
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(network.parameters())
-    batch_size = 64
-    torch.manual_seed(666)
+    new_cell_list = []
+    for cell in network.operationList[:-1]:
+        if isinstance(cell, NormalCell):
+            new_cell_list.append(("normal", cell.edge_operations))
+        else:
+            new_cell_list.append(("reduction", cell.edge_operations))
 
-    validations_top1 = []
-    validations_top5 = []
-    validations_loss = []
-    train_losses = []
-
-    statistics_history = {}
-    statistics_history["train_top1_history"] = []
-    statistics_history["train_top5_history"] = []
-    statistics_history["train_losses_history"] = []
-
-    for epoch in range(100):
-        train_dataloader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
-
-        top1_train_acc, top5_train_acc, train_loss = network.train_step(train_dataloader, optimizer, criterion, epoch, device)
-        statistics_history["train_top1_history"] += top1_train_acc.data_history
-        statistics_history["train_top5_history"] += top5_train_acc.data_history
-        statistics_history["train_losses_history"] += train_loss.data_history
-
-        torch.cuda.empty_cache()
-        val_top1, val_top5, val_loss, _ = network.test(val_dataset, criterion=criterion, device=device, batch_size=batch_size)
-
-        validations_top1.append(val_top1)
-        validations_top5.append(val_top5)
-        validations_loss.append(val_loss)
-        train_losses.append(train_loss.avg)
-
-        print(f"Validation Test\n"
-              f"Accuracy : {val_top1}\n"
-              f"Loss.: {val_loss}\n")
-
-        if best_acc < val_top1:
-            best_acc = val_top1
-            network.save(f"{save_path}/TrainedNet")
-
-        plot_training_statistics(save_path, f"NetworkTraining", range(epoch + 1), train_losses, np.array(validations_top1) / 100, np.array(validations_top5) / 100, validations_loss)
-
-        plot_history(save_path, "Top 1 Train Acc.", statistics_history["train_top1_history"], color="blueviolet")
-        plot_history(save_path, "Top 5 Train Acc.", statistics_history["train_top5_history"], color="mediumorchid")
-        plot_history(save_path, "Train Loss", statistics_history["train_losses_history"], color="dodgerblue")
-        with open(f"{save_path}/history_dict.pkl", "wb") as dict_file:
-            pkl.dump(statistics_history, dict_file)
-        torch.cuda.empty_cache()
+    evaluateCellNetwork(new_cell_list, save_path, device)
 
 
 if __name__ == "__main__":

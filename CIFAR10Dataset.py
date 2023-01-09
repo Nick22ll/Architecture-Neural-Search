@@ -36,26 +36,24 @@ class CIFAR10Dataset(Dataset):
                 self.data.append(data.to(device))
                 self.labels = torch.hstack((self.labels, torch.tensor(label, dtype=torch.int64, device=device)))
         else:
-            self.data = []
-            self.labels = torch.empty(0, dtype=torch.int64)
-            for data, label in dataset:
-                self.data.append(data)
-                self.labels = torch.hstack((self.labels, torch.tensor(label, dtype=torch.int64)))
+            self.data = np.empty(len(dataset), dtype=object)
+            self.labels = torch.empty(len(dataset), dtype=torch.int64)
+            for idx, (data, label) in enumerate(dataset):
+                self.data[idx] = data
+                self.labels[idx] = torch.tensor(label, dtype=torch.int64)
             quantity = quantity / 100
             classes = np.unique(self.labels)
-            labels = torch.empty(0, dtype=torch.int64)
-            data = []
-            self.data = np.array(self.data, dtype=object)
+            to_keep = []
             for label in classes:
                 indices = np.where(label == self.labels)[0]
                 indices = np.random.choice(indices, int(len(indices) * quantity))
-                labels = torch.hstack((labels, self.labels[indices]))
-                data.extend(self.data[indices])
+                to_keep.extend(indices)
 
-            self.data = data
-            self.labels = labels.to(device)
+            self.data = self.data[to_keep]
+            self.labels = self.labels[to_keep]
 
-            for i in range(len(data)):
+            self.labels = self.labels.to(device)
+            for i in range(len(self.data)):
                 self.data[i] = self.data[i].to(device)
 
     def __len__(self):

@@ -4,7 +4,7 @@ import dgl
 import numpy as np
 import torch.nn.functional as F
 
-from Cells import generate_nodes, CELL_PARAMETERS
+from Cells import generateNodes, CELL_PARAMETERS
 from DARTS.OSpace import generateOSpaceCell, generateOSpaceCellChannels
 from Operations import *
 
@@ -78,7 +78,7 @@ class SearchNormalCell(nn.Module, dgl.DGLGraph):
         self.chn_fix = ChannelFixer(in_channels, channels, 1, 1, 0, affine=False)
 
         # nodes generation
-        start_nodes, end_nodes = generate_nodes(cell_nodes)
+        start_nodes, end_nodes = generateNodes(cell_nodes)
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
@@ -117,7 +117,7 @@ class SearchChnCell(nn.Module, dgl.DGLGraph):
         self.image_dim = input_dim
         self.channels = cell_channels
         # nodes generation
-        start_nodes, end_nodes = generate_nodes(cell_nodes)
+        start_nodes, end_nodes = generateNodes(cell_nodes)
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")
@@ -193,7 +193,7 @@ class SearchReductionCell(nn.Module, dgl.DGLGraph):
         self.chn_fix = ChannelFixer(in_channels, self.channels, 1, 1, 0, affine=False)
 
         # nodes generation
-        start_nodes, end_nodes = generate_nodes(cell_nodes)
+        start_nodes, end_nodes = generateNodes(cell_nodes)
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore")

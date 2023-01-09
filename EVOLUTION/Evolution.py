@@ -1,5 +1,7 @@
 import gc
+import os
 import re
+import shutil
 from itertools import combinations
 
 from matplotlib import pyplot as plt
@@ -18,7 +20,7 @@ class Evolution:
         self.networks_path = []
         self.network_ID = 0
         self.mutation_rate = mutation_rate
-        self.networks_save_dir = f"EvolutionNetworks"
+        self.networks_save_dir = f"EVOLUTIONNetworks"
 
         ###  Networks parameters  ####
         self.image_dim = image_dim
@@ -54,7 +56,7 @@ class Evolution:
 
     def giveLifeNewNetwork(self, cells_list):
         net = CellNetwork()
-        net.initialization(cells_list, self.image_dim, self.in_channels, self.first_cell_channels, device="cpu")
+        net.initialization(cells_list, self.image_dim, self.in_channels, self.first_cell_channels)
         filename = f"network{self.network_ID}.pkl"
         net.save_as_pkl(self.networks_save_dir, filename)
         self.networks_path.append(f"{self.networks_save_dir}/{filename}")
@@ -74,13 +76,15 @@ class Evolution:
 
         if decision_mode == "acc":
             tmp_performances = [performance[0] for performance in net_performances]
+            reverse = True
         elif decision_mode == "loss":
+            reverse = False
             tmp_performances = [performance[1] for performance in net_performances]
         else:
             raise ()
 
-        self.networks_path = [x for _, x in sorted(zip(tmp_performances, self.networks_path), reverse=True)]
-        self.parents_performances = [x for _, x in sorted(zip(tmp_performances, net_performances), reverse=True)][:math.ceil((1 - to_kill) * self.population)]
+        self.networks_path = [x for _, x in sorted(zip(tmp_performances, self.networks_path), reverse=reverse)]
+        self.parents_performances = [x for _, x in sorted(zip(tmp_performances, net_performances), reverse=reverse)][:math.ceil((1 - to_kill) * self.population)]
 
         for _ in range(math.floor(self.population * to_kill)):
             if os.path.exists(self.networks_path[-1]):
@@ -96,7 +100,7 @@ class Evolution:
         cripples = self.rng.choice(range(population_diff), int(population_diff * 0.50), replace=False)
 
         for i in range(population_diff):
-            couple = couples[self.rng.choice(range(len(couples)), replace=population_diff > len(couples))]
+            couple = couples[i % len(couples)]
 
             gc.disable()
             with open(couple[0], "rb") as mother_file:
@@ -136,44 +140,77 @@ class Evolution:
             self.giveLifeNewNetwork(cells_list)
 
     def evolveNetworkPopulation(self, generations, to_kill=0.4, evolve_name="EvolutionStatistics", decision_mode="acc", load_state=False):
-        # if load_state:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        train_dataset = CIFAR10Dataset(path="../CIFAR-10", train=True, device="cpu", quantity=100)
-        test_dataset = CIFAR10Dataset(path="../CIFAR-10", train=False, device="cpu", quantity=100)
+        train_dataset = CIFAR10Dataset(path="../CIFAR-10", train=True, device="cpu", quantity=50)
+        train_dataset, val_dataset = train_dataset.split(80)
 
         best_accs = []
         best_losses = []
+
+        start_time = time()
+        generations_times = []
+
         for generation in tqdm(range(generations), position=0, leave=False, desc=f"Training: ", colour="white", ncols=80):
             tqdm.write(f"\n\nGeneration {generation} started!")
-            performances = self.trainNetworkPopulation(train_dataset, test_dataset, device, epochs=8)
+            performances = self.trainNetworkPopulation(train_dataset, val_dataset, device, epochs=8)
+
+            generations_times.append((time() - start_time) / 3600)  # tempi in ore
 
             acc_performances = [tup[0] for tup in performances]
             loss_performances = [tup[1] for tup in performances]
 
-            best_losses.append(min(loss_performances))
-            best_accs.append(max(acc_performances))
-
             if decision_mode == "acc":
-                best_net = self.networks_path[np.argmax(acc_performances)]
+                best_idx = np.argmax(acc_performances)
+                best_losses.append(loss_performances[best_idx])
+                best_accs.append(acc_performances[best_idx])
+                best_nets = np.array(self.networks_path)[np.argsort(acc_performances)[::-1]]
+
             else:
-                best_net = self.networks_path[np.argmin(loss_performances)]
+                best_idx = np.argmin(loss_performances)
+                best_losses.append(loss_performances[best_idx])
+                best_accs.append(acc_performances[best_idx])
+                best_nets = np.array(self.networks_path)[np.argsort(loss_performances)]
 
             os.makedirs("EVOLUTIONStatistics", exist_ok=True)
-            plt.plot([i for i in range(generation + 1)], best_accs, 'blueviolet', label="Generation Accuracy")
-            plt.title(f"Best Perf.: {best_accs[-1]} with {best_net.split('/')[1].replace('.pkl', '')}")
+
+            plt.plot([i for i in range(generation + 1)], best_losses, 'blue', label="Generation Loss")
+            plt.plot([i for i in range(generation + 1)], np.array(best_accs) / 100, 'blueviolet', label="Generation Accuracy")
+            plt.title(f"Best Loss {round(best_losses[-1], 2)} and acc. {best_accs[-1]} with {best_nets[0].split('/')[1].replace('.pkl', '')}")
             plt.xlabel('Generation')
-            plt.ylabel("Accuracy")
+            plt.ylabel("Statistics")
             plt.legend()
             plt.savefig(f"EVOLUTIONStatistics/{evolve_name}")
             plt.close()
 
-            plt.plot([i for i in range(generation + 1)], best_losses, 'blue', label="Generation Loss")
-            plt.title(f"Best Perf.: {best_losses[-1]} with {best_net.split('/')[1].replace('.pkl', '')}")
+            plt.plot([i for i in range(generation + 1)], [generations_times[0]] + [generations_times[i] - generations_times[i - 1] for i in range(1, generation + 1)], 'green', label="Generation Time")
+            plt.title(f"Generation Training Time")
             plt.xlabel('Generation')
-            plt.ylabel("Loss")
+            plt.ylabel("Time (Hours)")
             plt.legend()
-            plt.savefig(f"EVOLUTIONStatistics/{evolve_name}")
+            plt.savefig(f"EVOLUTIONStatistics/{evolve_name}_GenerationTime")
             plt.close()
+
+            plt.plot(generations_times, best_losses, 'blue', label="Generation Loss")
+            plt.plot(generations_times, np.array(best_accs) / 100, 'blueviolet', label="Generation Accuracy")
+            plt.title(f"Best Loss {round(best_losses[-1], 2)} and acc. {best_accs[-1]} with {best_nets[0].split('/')[1].replace('.pkl', '')}")
+            plt.xlabel('Elapsed Time (Hours)')
+            plt.ylabel("Statistics")
+            plt.legend()
+            plt.savefig(f"EVOLUTIONStatistics/{evolve_name}_OverallTime")
+            plt.close()
+
+            os.makedirs("EVOLUTIONBestNetworks", exist_ok=True)
+            for idx, top_net_path in enumerate(best_nets[:2]):
+                shutil.copy(top_net_path, f"EVOLUTIONBestNetworks/Top{idx}Net.pkl")
+
+            save_dict = {
+                "generations_times": generations_times,
+                "best_accuracies": best_accs,
+                "best_losses": best_losses
+            }
+
+            with open(f"EVOLUTIONStatistics/{evolve_name}_Statistics.pkl", "wb") as stat_file:
+                pkl.dump(save_dict, stat_file)
 
             self.killWeak(performances, to_kill, decision_mode)
             self.reproducePopulation()
@@ -208,8 +245,8 @@ class Evolution:
         best_acc = 0
         best_loss = 1000
         criterion = nn.CrossEntropyLoss()
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-        BATCH_SIZE = 128
+        optimizer = torch.optim.AdamW(model.parameters())
+        BATCH_SIZE = 64
         torch.manual_seed(666)
         for epoch in tqdm(range(epochs), position=0, leave=False, desc=f"Training: ", colour="white", ncols=80):
             train_dataloader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=BATCH_SIZE, shuffle=True)

@@ -2,7 +2,6 @@ import os
 from time import time
 
 import numpy as np
-import torch
 import torch.nn.functional as F
 from sklearn import metrics
 
@@ -13,9 +12,9 @@ from Operations import *
 from Utils import AverageMeter, ProgressMeter, accuracy
 
 
-class SearchNetwork(nn.Module):
+class SearchCellNetwork(nn.Module):
     def __init__(self, cells_num):
-        super(SearchNetwork, self).__init__()
+        super(SearchCellNetwork, self).__init__()
 
         self.cells_num = cells_num
 
@@ -37,8 +36,8 @@ class SearchNetwork(nn.Module):
         cell_nodes = max(CELL_PARAMETERS["cell_nodes"])
         edge_num = sum(i for i in range(cell_nodes - 1, 0, -1))
 
-        self.normal_alphas = torch.nn.Parameter(1e-3 * torch.randn((cells_num, edge_num, len(generateOSpaceCell()))), requires_grad=True)
-        self.reduction_alphas = torch.nn.Parameter(1e-3 * torch.randn((len(self.reduction_position), edge_num, len(generateOSpaceCell()))), requires_grad=True)
+        self.normal_alphas = torch.nn.Parameter(1e-3 * torch.randn((edge_num, len(generateOSpaceCell()))), requires_grad=True)
+        self.reduction_alphas = torch.nn.Parameter(1e-3 * torch.randn((edge_num, len(generateOSpaceCell()))), requires_grad=True)
 
         self.global_pooling = nn.AdaptiveAvgPool2d(1)
 
@@ -74,22 +73,20 @@ class SearchNetwork(nn.Module):
                 pass
 
         self.operationList.append(nn.Linear(in_channels, 10, bias=False))
-        # in_dim_classifier = pow(self.operationList[-1].image_dim, 2) * channels
-        # self.operationList.append(GenericMLP(in_dim_classifier, int(in_dim_classifier / 2 ** ((math.log(in_dim_classifier, 2) - math.log(8, 2)) / 2)), 10, 0))
 
     def forward(self, out):
         out = self.activation(self.fix_chn(out))
 
         delay = 0
-        out = self.activation(self.operationList[0](out, self.normal_alphas[0]))
+        out = self.activation(self.operationList[0](out, self.normal_alphas))
         prev_1 = torch.clone(out)
 
         for idx, layer in enumerate(self.operationList[1:-1], start=1):
             if idx in self.reduction_indices:
-                out = self.activation(layer(out, self.reduction_alphas[delay]))
+                out = self.activation(layer(out, self.reduction_alphas))
                 delay += 1
             else:
-                out = self.activation(layer(out, self.normal_alphas[idx - delay]))
+                out = self.activation(layer(out, self.normal_alphas))
 
             prev_2 = torch.clone(out)
             if out.shape != prev_1.shape:
@@ -100,7 +97,7 @@ class SearchNetwork(nn.Module):
 
         out = self.global_pooling(out).view(out.size(0), -1)
         return self.operationList[-1](out)
-        # return self.operationList[-1](torch.flatten(batched_images, start_dim=1))
+
 
     def genotypeCellNetworkNoZero(self):
         gene_normal_cells_indices = np.argmax(F.softmax(self.normal_alphas, dim=-1).data.cpu().numpy(), axis=-1)
@@ -109,15 +106,14 @@ class SearchNetwork(nn.Module):
         delay = 0
         cells_list = []
         for cell_idx, cell in enumerate(self.operationList[:-1]):
-
             if isinstance(cell, SearchNormalCell):
                 cells_list.append(("normal", []))
-                for edge_idx in range(self.normal_alphas[cell_idx - delay].shape[0]):
+                for edge_idx in range(self.normal_alphas.shape[0]):
                     best_op_idx = gene_normal_cells_indices[cell_idx - delay][edge_idx]
                     cells_list[cell_idx][1].append(O_space[best_op_idx])
             else:
                 cells_list.append(("reduction", []))
-                for edge_idx in range(self.reduction_alphas[delay].shape[0]):
+                for edge_idx in range(self.reduction_alphas.shape[0]):
                     best_op_idx = gene_reduction_cells_indices[delay][edge_idx]
                     cells_list[cell_idx][1].append(O_space[best_op_idx])
                 delay += 1
@@ -127,15 +123,15 @@ class SearchNetwork(nn.Module):
         O_space = generateOSpaceCell()
         op_zero_idx = O_space.index("operation$0$")
 
-        no_zero_normal_alphas = torch.cat((self.normal_alphas[:, :, :op_zero_idx], self.normal_alphas[:, :, op_zero_idx + 1:]), dim=-1)
-        no_zero_reduction_alphas = torch.cat((self.reduction_alphas[:, :, :op_zero_idx], self.reduction_alphas[:, :, op_zero_idx + 1:]), dim=-1)
+        no_zero_normal_alphas = torch.cat((self.normal_alphas[:, :op_zero_idx], self.normal_alphas[:, op_zero_idx + 1:]), dim=-1)
+        no_zero_reduction_alphas = torch.cat((self.reduction_alphas[:, :op_zero_idx], self.reduction_alphas[:, op_zero_idx + 1:]), dim=-1)
 
         O_space.pop(op_zero_idx)
 
         top_normal_operations, top_normal_operation_indices = torch.sort(F.softmax(no_zero_normal_alphas, dim=-1), dim=-1, descending=True)
-        top_normal_operations, top_normal_operation_indices = top_normal_operations[:, :, 0], top_normal_operation_indices[:, :, 0]
+        top_normal_operations, top_normal_operation_indices = top_normal_operations[:, 0], top_normal_operation_indices[:, 0]
         top_reduction_cells, top_reduction_cells_indices = torch.sort(F.softmax(no_zero_reduction_alphas, dim=-1), dim=-1, descending=True)
-        top_reduction_cells, top_reduction_cells_indices = top_reduction_cells[:, :, 0], top_reduction_cells_indices[:, :, 0]
+        top_reduction_cells, top_reduction_cells_indices = top_reduction_cells[:, 0], top_reduction_cells_indices[:, 0]
 
         delay = 0
         cells_list = []
@@ -143,21 +139,21 @@ class SearchNetwork(nn.Module):
             if isinstance(cell, SearchNormalCell):
                 cells_list.append(("normal", ["operation$0$"] * len(cell.edges()[0])))
                 start_nodes = cell.edges()[0]
-                for node_id in range(0, cell.num_nodes()-1):
+                for node_id in range(0, cell.num_nodes() - 1):
                     edge_indices = np.where(start_nodes == node_id)[0]
-                    _, sorted_edges_indices = torch.sort(top_normal_operations[cell_idx - delay][edge_indices], descending=True, dim=-1)
+                    _, sorted_edges_indices = torch.sort(top_normal_operations[edge_indices], descending=True, dim=-1)
 
                     for edge_idx in sorted_edges_indices[:2]:
-                        cells_list[cell_idx][1][edge_indices[edge_idx]] = O_space[top_normal_operation_indices[cell_idx - delay][edge_indices[edge_idx]]]
+                        cells_list[cell_idx][1][edge_indices[edge_idx]] = O_space[top_normal_operation_indices[edge_indices[edge_idx]]]
 
             else:
                 cells_list.append(("reduction", ["operation$0$"] * len(cell.edges()[0])))
                 start_nodes = cell.edges()[0]
                 for node_id in range(0, cell.num_nodes() - 1):
                     edge_indices = np.where(start_nodes == node_id)[0]
-                    _, sorted_edges_indices = torch.sort(top_reduction_cells[delay][edge_indices], descending=True, dim=-1)
+                    _, sorted_edges_indices = torch.sort(top_reduction_cells[edge_indices], descending=True, dim=-1)
                     for edge_idx in sorted_edges_indices[:2]:
-                        cells_list[cell_idx][1][edge_indices[edge_idx]] = O_space[top_reduction_cells_indices[delay][edge_indices[edge_idx]]]
+                        cells_list[cell_idx][1][edge_indices[edge_idx]] = O_space[top_reduction_cells_indices[edge_indices[edge_idx]]]
 
                 delay += 1
         return cells_list

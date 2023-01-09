@@ -13,6 +13,7 @@ from matplotlib.lines import Line2D
 from sklearn import metrics
 from sklearn.manifold import TSNE
 from torch import nn
+from tqdm import tqdm
 
 
 def plot_confusion_matrix(cm, target_names=None, cmap=None):
@@ -106,7 +107,7 @@ def plot_grad_flow(named_parameters, verbose=1, legend=False):
     plt.show()
 
 
-def plot_alpha_grad_flow(model_named_parameters, verbose=1, legend = False):
+def plot_alpha_grad_flow(model_named_parameters, verbose=1, legend=False):
     """Plots the gradients flowing through different layers in the net during training.
     Can be used for checking for possible gradient vanishing / exploding problems.
 
@@ -145,7 +146,7 @@ def plot_alpha_grad_flow(model_named_parameters, verbose=1, legend = False):
     plt.show()
 
 
-def plot_training_statistics(path, filename, epochs, train_losses, val_top1, val_top5, val_losses, title="Training Statistics", x_axis_label = "Epochs"):
+def plot_training_statistics(path, filename, epochs, train_losses, val_top1, val_top5, val_losses, title="Training Statistics", x_axis_label="Epochs"):
     os.makedirs(path, exist_ok=True)
     plt.plot(epochs, train_losses, 'dodgerblue', label='Training Loss')
     plt.plot(epochs, val_top1, 'blueviolet', label='Validation Top1 Accuracy')
@@ -312,6 +313,7 @@ def compute_scores(true_labels, pred_labels, logits):
     loss = criterion(torch.tensor(logits), final_labels)
     return accuracy, loss.item(), confusion_matrix
 
+
 def plot_history(path, stat_name, data_history, color='mediumblue'):
     os.makedirs(path, exist_ok=True)
     plt.plot(range(len(data_history)), data_history, color, label=stat_name)
@@ -321,3 +323,63 @@ def plot_history(path, stat_name, data_history, color='mediumblue'):
     plt.legend()
     plt.savefig(f"{path}/{stat_name}")
     plt.close()
+
+
+def plotTopSpecies(population, path, show=False):
+    def fit_species(sub_pop, species, count):
+        tmp = "{:.2f}".format(population[sub_pop][species[count[0]]].fitness())
+        count[0] += 1
+        return tmp
+
+    def fit_individuals(count):
+        tmp = "{:.2f}".format(individual_fitness[count[0]])
+        count[0] += 1
+        return tmp
+
+    top_sub_pop_species = population.sortSpecies()
+    for sub_pop in top_sub_pop_species:
+
+        species_counter = [0]
+        individual_counter = [0]
+
+        top_species = top_sub_pop_species[sub_pop][:3]
+
+        fig, ax = plt.subplots()
+
+        size = 0.3
+
+        individual_fitness = []
+        top_individuals = []
+        for sp in top_species:
+            ind_fitness = []
+            for ind_key in population[sub_pop][sp].sortIndividuals()[:2]:
+                ind_fitness.append(population[sub_pop][sp].alive_individuals[ind_key])
+                individual_fitness.append(population[sub_pop][sp].individuals_fitness[ind_key])
+            while len(ind_fitness) < 2:
+                ind_fitness.append(0)
+                individual_fitness.append(0)
+            top_individuals.append(ind_fitness)
+
+        top_individuals = np.array(top_individuals)
+
+        tqdm.write(f"Top 3 {sub_pop.capitalize()} Species: {top_species}")
+        tqdm.write(f"With Individual Fitness: {individual_fitness}")
+
+        outer_colors = ["royalblue", "mediumvioletred", "forestgreen"]
+        outer_explodes = [0.2, 0, 0]
+        inner_colors = ["cornflowerblue", "lightskyblue", "hotpink", "pink", "limegreen", "lightgreen"]
+        inner_explodes = [0.2, 0.2, 0, 0, 0, 0]
+
+        ax.pie(top_individuals.sum(axis=1), radius=1, colors=outer_colors, labels=top_species, autopct=lambda pct: fit_species(sub_pop, top_species, species_counter), pctdistance=0.85,
+               wedgeprops=dict(width=size, edgecolor='w'))
+
+        ax.pie(top_individuals.flatten(), radius=1 - size, colors=inner_colors, autopct=lambda pct: fit_individuals(individual_counter), pctdistance=0.75,
+               wedgeprops=dict(width=size, edgecolor='w'))
+
+        ax.set(aspect="equal", title=f"Top 3 {sub_pop.capitalize()} Species Fitness")
+
+        plt.savefig(f"{path}/Top3Spec{sub_pop.capitalize()}.png")
+
+        if show:
+            plt.show()
+        plt.close()

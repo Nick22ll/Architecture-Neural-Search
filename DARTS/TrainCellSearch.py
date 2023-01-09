@@ -9,21 +9,21 @@ import torch.nn as nn
 
 from CIFAR10Dataset import CIFAR10Dataset
 from CellNetwork import CellNetwork
-from DARTS.SearchNetwork import SearchNetwork
+from DARTS.SearchCellNetwork import SearchCellNetwork
 from PlotUtils import plot_training_statistics, plot_history
 
 
 def main():
     os.chdir(os.path.dirname(sys.argv[0]))
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    save_path = f"DARTSResults/ArchitectureSearch"
+    save_path = f"DARTSResults/CellSearch"
 
     CELLS_NUM = 7
     IMAGE_DIM = 32
     IN_CHANNELS = 3
     FIRST_CELL_CHANNELS = 16
 
-    model = SearchNetwork(CELLS_NUM)
+    model = SearchCellNetwork(CELLS_NUM)
     model.initialization(IMAGE_DIM, IN_CHANNELS, FIRST_CELL_CHANNELS, device)
     model.to(device)
 
@@ -38,20 +38,20 @@ def main():
 
     # switch to train mode
     model.train()
-    best_loss = 10000000000
+    best_loss = 100000000
     best_loss_acc = None
 
     alpha_parameters = []
     weights_parameters = []
 
     for n, p in model.named_parameters():
-        if n in ["cell_alphas", "reduction_alphas", "cell_chn_alphas"]:
+        if n in ["cell_alphas", "reduction_alphas"]:
             alpha_parameters.append(p)
         else:
             weights_parameters.append(p)
 
-    weights_optimizer = torch.optim.AdamW(weights_parameters, lr=0.025, amsgrad=True)
-    alpha_optimizer = torch.optim.AdamW(alpha_parameters, lr=3 * 1e-4, weight_decay=1e-3, amsgrad=True)
+    weights_optimizer = torch.optim.Adam(weights_parameters, lr=0.025, amsgrad=True)
+    alpha_optimizer = torch.optim.Adam(alpha_parameters, lr=3 * 1e-4, weight_decay=1e-3, amsgrad=True)
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         weights_optimizer, epochs, eta_min=0.001)
@@ -97,10 +97,10 @@ def main():
         if best_loss > val_loss:
             best_loss = val_loss
             best_loss_acc = val_top1
-            model.save(f"{save_path}/BestLossArchitecture")
+            model.save(f"{save_path}/BestLossCell")
 
-        plot_training_statistics(save_path, "ArchitectureSearchTraining", range(epoch + 1), train_losses, np.array(validations_top1) / 100, np.array(validations_top5) / 100, validations_loss, title=f"Best Loss {round(best_loss, 2)} and Acc. {best_loss_acc}")
-        plot_training_statistics(save_path, "ArchitectureSearchTrainingTime", epoch_times, train_losses, np.array(validations_top1) / 100, np.array(validations_top5) / 100, validations_loss, title=f"Best Loss {round(best_loss, 2)} and Acc. {best_loss_acc}", x_axis_label="Elapsed Time (Min)")
+        plot_training_statistics(save_path, f"CellTraining", range(epoch + 1), train_losses, np.array(validations_top1) / 100, np.array(validations_top5) / 100, validations_loss, title=f"Best Loss {round(best_loss, 2)} and Acc. {best_loss_acc}")
+        plot_training_statistics(save_path, f"CellTrainingTimes", epoch_times, train_losses, np.array(validations_top1) / 100, np.array(validations_top5) / 100, validations_loss, title=f"Best Loss {round(best_loss, 2)} and Acc. {best_loss_acc}", x_axis_label="Elapsed Time (Min)")
 
         plot_history(save_path, "Top 1 Train Acc.", statistics_history["train_top1_history"])
         plot_history(save_path, "Top 5 Train Acc.", statistics_history["train_top5_history"])

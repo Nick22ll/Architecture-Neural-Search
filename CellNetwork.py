@@ -29,7 +29,7 @@ class CellNetwork(nn.Module):
 
         self.global_pooling = nn.AdaptiveAvgPool2d(1)
 
-    def initialization(self, network_cells, input_dim, in_channels, first_cell_chn, device):
+    def initialization(self, network_cells, input_dim, in_channels, first_cell_chn):
         self.fix_chn.append(nn.Conv2d(in_channels, first_cell_chn, 3, padding=1, bias=False))
         self.fix_chn.append(nn.BatchNorm2d(first_cell_chn))
 
@@ -42,7 +42,7 @@ class CellNetwork(nn.Module):
         cell_nodes = step
         for cell_idx, cell_tuple in enumerate(network_cells):
             if cell_tuple[0] == "normal" and cell_idx == 0:
-                self.operationList.append(NormalCell(cell_tuple[1], input_dim, first_cell_chn, first_cell_chn, cell_nodes, device))
+                self.operationList.append(NormalCell(cell_tuple[1], input_dim, first_cell_chn, first_cell_chn, cell_nodes))
                 self.cells_indices.append(len(self.operationList) - 1)
             else:
                 if isinstance(self.operationList[-1], NormalCell):
@@ -54,10 +54,10 @@ class CellNetwork(nn.Module):
                 in_channels = channels * (cell_nodes - 1)
 
                 if cell_tuple[0] == "normal":
-                    self.operationList.append(NormalCell(cell_tuple[1], image_dim, in_channels, channels, cell_nodes, device))
+                    self.operationList.append(NormalCell(cell_tuple[1], image_dim, in_channels, channels, cell_nodes))
                     self.cells_indices.append(len(self.operationList) - 1)
                 else:
-                    self.operationList.append(ReductionCell(cell_tuple[1], image_dim, in_channels, channels, cell_nodes, device))
+                    self.operationList.append(ReductionCell(cell_tuple[1], image_dim, in_channels, channels, cell_nodes))
                     self.reduces_skip.append(FactorizedReduce(in_channels, in_channels * 2))
                     self.reduction_indices.append(len(self.operationList) - 1)
 
@@ -82,11 +82,11 @@ class CellNetwork(nn.Module):
             out += prev_1
             out = self.activation(out)
             prev_1 = torch.clone(prev_2)
-        out = self.activation(self.global_pooling(out).reshape(-1, out.shape[1]))
+        out = self.global_pooling(out).view(out.size(0), -1)
         return self.operationList[-1](out)
         # return self.operationList[-1](torch.flatten(batched_images, start_dim=1))
 
-    def train_step(self, train_dataloader, optimizer, criterion, epoch, device, verbose = 1):
+    def train_step(self, train_dataloader, optimizer, criterion, epoch, device, verbose=1):
         # switch to train mode
         self.train()
 
