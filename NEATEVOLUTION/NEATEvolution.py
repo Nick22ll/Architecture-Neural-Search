@@ -30,13 +30,14 @@ class NEATEvolution:
         self.BATCH_SIZE = 256
         self.EPOCHS = 8
         self.NETWORKS_NUMBER = 20
-        self.DATASET_SIZE = 15
+        self.DATASET_SIZE = 30
 
         # EVOLVE PARAMETERS
         self.GENERATIONS = 36
         self.FITNESS_MODE = "acc"
         self.MUTATION_RATE = 0.20
         self.MAX_MUTATION_RATE = 0.30
+        self.UNIFORM_SPECIES_CHOOSE = True
 
         # PATHS
         self.save_path = "Populations"
@@ -58,7 +59,10 @@ class NEATEvolution:
         species_for_cell = {}
         sub_pop_modules = {}
         for cell_type in np.unique(blueprint):
-            probabilities = exp_distr(len(list(alives[cell_type])), lam=0.15)
+            if self.UNIFORM_SPECIES_CHOOSE:
+                probabilities = None
+            else:
+                probabilities = exp_distr(len(list(alives[cell_type])), lam=0.15)
             species_name = self.rng.choice(alives[cell_type], p=probabilities)
             species_for_cell[cell_type] = self.population[cell_type][species_name]
 
@@ -121,6 +125,8 @@ class NEATEvolution:
         return best_acc, best_loss
 
     def generation(self, train_dataset, test_dataset):
+
+        used_cells = []
         for net_id in tqdm(range(self.NETWORKS_NUMBER), position=1, leave=False, desc=f"Training Networks: ", colour="white", ncols=80):
             network = self.assembleNetwork()
             performance = self.trainNetwork(network, train_dataset, test_dataset)[0 if self.FITNESS_MODE == "acc" else 1]
@@ -128,7 +134,10 @@ class NEATEvolution:
             for cell in network.operationList[:-1]:
                 species = encodeSpecies(cell.edge_operations)
                 sub_pop = "normal" if isinstance(cell, NormalCell) else "reduction"
-                self.population[sub_pop][f"Species[{species}]"].updateIndividualFitness(cell.edge_operations, performance)
+                used_cells.append((sub_pop, species, cell.edge_operations, performance))
+
+        for sub_pop, species, edge_operations, performance in used_cells:
+            self.population[sub_pop][f"Species[{species}]"].updateIndividualFitness(edge_operations, performance)
 
     def evolve(self):
         train_dataset = CIFAR10Dataset(path="../CIFAR-10", train=True, device="cpu", quantity=self.DATASET_SIZE)
@@ -138,7 +147,12 @@ class NEATEvolution:
         os.makedirs(save_path, exist_ok=True)
 
         for generation in tqdm(range(self.GENERATIONS), position=0, leave=False, desc=f"Generation: ", colour="white", ncols=100):
+
+            if generation > 0:
+                self.UNIFORM_SPECIES_CHOOSE = True
+
             self.generation(train_dataset, val_dataset)
+
             if generation > 2:
                 plotTopSpecies(self.population, save_path, show=True)
 
@@ -176,19 +190,21 @@ class NEATEvolution:
         with open(f"{path}/{filename}.pkl", "rb") as pop_file:
             self.population = pkl.load(pop_file)
 
-    def bestNetwork(self, normal_layers):
+    def bestNetwork(self, normal_layers, best_normal_species_idx, best_reduction_species_idx):
 
         REDUCTION_POS = [math.floor(normal_layers / 3), math.floor(normal_layers / 3 * 2)]
 
-        best_species = self.population.topKFitness(1)
+        best_species = self.population.topKFitness(10)
 
-        normal_best_species = best_species["normal"][0][0]
-        best_individual_key = normal_best_species.topKFitness(1)[0][0]
-        best_normal_cell = ("normal", normal_best_species.individuals[best_individual_key])
+        # normal_best_species = best_species["normal"][best_normal_species_idx][0]
+        # best_individual_key = normal_best_species.topKFitness(1)[0][0]
+        # best_normal_cell = ("normal", normal_best_species.individuals[best_individual_key])
 
-        reduction_best_species = best_species["reduction"][0][0]
+        reduction_best_species = best_species["reduction"][best_reduction_species_idx][0]
         best_individual_key = reduction_best_species.topKFitness(1)[0][0]
         best_reduction_cell = ("reduction", reduction_best_species.individuals[best_individual_key])
+
+        best_normal_cell = ("normal", reduction_best_species.individuals[best_individual_key])
 
         first_block = [best_normal_cell] * REDUCTION_POS[0]
         second_block = [best_normal_cell] * REDUCTION_POS[0]
