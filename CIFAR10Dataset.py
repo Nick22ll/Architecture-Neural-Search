@@ -19,6 +19,15 @@ def data_transform_cifar10():
     ])
     return transform
 
+def data_reverse_transform_cifar10():
+    CIFAR_MEAN = [0.49139968, 0.48215827, 0.44653124]
+    CIFAR_STD = [0.24703233, 0.24348505, 0.26158768]
+    invTrans = transforms.Compose([transforms.Normalize(mean=[0., 0., 0.],
+                                                        std=[1/el for el in CIFAR_STD]),
+                                   transforms.Normalize(mean=[el * (-1) for el in CIFAR_MEAN],
+                                                        std=[1., 1., 1.]),
+                                   ])
+    return invTrans
 
 class CIFAR10Dataset(Dataset):
     def __init__(self, path, train, device, quantity=100):
@@ -28,6 +37,7 @@ class CIFAR10Dataset(Dataset):
             dataset = torchvision.datasets.CIFAR10(root=path, train=False, download=True, transform=data_transform_cifar10())
 
         self.classes = ["airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck"]
+
         if quantity == 100:
             self.data = []
             self.labels = torch.empty(0, dtype=torch.int64, device=device)
@@ -64,7 +74,7 @@ class CIFAR10Dataset(Dataset):
 
     def to(self, device):
         self.data = [elem.to(device) for elem in self.data]
-        self.labels = [elem.to(device) for elem in self.labels]
+        self.labels = self.labels.to(device)
 
     def half(self):
         self.data = [elem.half() for elem in self.data]

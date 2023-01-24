@@ -149,10 +149,10 @@ def plot_alpha_grad_flow(model_named_parameters, verbose=1, legend=False):
 def plot_training_statistics(path, filename, epochs, train_losses, val_top1, val_top5, val_losses, title="Training Statistics", x_axis_label="Epochs"):
     os.makedirs(path, exist_ok=True)
     plt.plot(epochs, train_losses, 'dodgerblue', label='Training Loss')
-    plt.plot(epochs, val_top1, 'blueviolet', label='Validation Top1 Accuracy')
-    plt.plot(epochs, val_top5, 'mediumorchid', label='Validation Top5 Accuracy')
+    plt.plot(epochs, val_top1, 'blueviolet', label='Test Top1 Accuracy')
+    plt.plot(epochs, val_top5, 'mediumorchid', label='Test Top5 Accuracy')
     if val_losses is not None:
-        plt.plot(epochs, val_losses, 'mediumblue', label='Validation Loss')
+        plt.plot(epochs, val_losses, 'mediumblue', label='Test Loss')
     plt.title(title)
     plt.xlabel(x_axis_label)
     plt.ylabel('Statistics')
