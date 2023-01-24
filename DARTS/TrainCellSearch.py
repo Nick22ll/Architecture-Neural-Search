@@ -50,7 +50,7 @@ def main():
         else:
             weights_parameters.append(p)
 
-    weights_optimizer = torch.optim.Adam(weights_parameters, lr=0.025, amsgrad=True)
+    weights_optimizer = torch.optim.SGD(weights_parameters, lr=0.025, momentum=0.9, weight_decay=3 * 1e-4)  # torch.optim.Adam(weights_parameters, lr=0.025, amsgrad=True)
     alpha_optimizer = torch.optim.Adam(alpha_parameters, lr=3 * 1e-4, weight_decay=1e-3, amsgrad=True)
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(

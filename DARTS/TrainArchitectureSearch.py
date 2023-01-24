@@ -51,7 +51,7 @@ def main():
             weights_parameters.append(p)
 
     weights_optimizer = torch.optim.AdamW(weights_parameters, lr=0.025, amsgrad=True)
-    alpha_optimizer = torch.optim.AdamW(alpha_parameters, lr=3 * 1e-4, weight_decay=1e-3, amsgrad=True)
+    alpha_optimizer = torch.optim.AdamW(alpha_parameters, lr=3 * 1e-4, amsgrad=True)
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         weights_optimizer, epochs, eta_min=0.001)
