@@ -9,7 +9,8 @@ def main():
     os.chdir(os.path.dirname(sys.argv[0]))
 
     evolution = NEATEvolution(7, 5)
-    # evolution.loadPopulation("Populations", "population07012023_1807")
+    evolution.loadPopulation("Populations", "population13012023_0109")
+    evolution.loadPopulation("Populations", "population17012023_0054")
     evolution.evolve()
 
 

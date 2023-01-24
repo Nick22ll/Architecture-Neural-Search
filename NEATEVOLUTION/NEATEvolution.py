@@ -190,21 +190,21 @@ class NEATEvolution:
         with open(f"{path}/{filename}.pkl", "rb") as pop_file:
             self.population = pkl.load(pop_file)
 
-    def bestNetwork(self, normal_layers, best_normal_species_idx, best_reduction_species_idx):
+    def bestNetwork(self, normal_layers, best_normal_species_idx=0, best_reduction_species_idx=0):
 
         REDUCTION_POS = [math.floor(normal_layers / 3), math.floor(normal_layers / 3 * 2)]
 
         best_species = self.population.topKFitness(10)
 
-        # normal_best_species = best_species["normal"][best_normal_species_idx][0]
-        # best_individual_key = normal_best_species.topKFitness(1)[0][0]
-        # best_normal_cell = ("normal", normal_best_species.individuals[best_individual_key])
+        normal_best_species = best_species["normal"][best_normal_species_idx][0]
+        best_individual_key = normal_best_species.topKFitness(1)[0][0]
+        best_normal_cell = ("normal", normal_best_species.individuals[best_individual_key])
 
         reduction_best_species = best_species["reduction"][best_reduction_species_idx][0]
         best_individual_key = reduction_best_species.topKFitness(1)[0][0]
         best_reduction_cell = ("reduction", reduction_best_species.individuals[best_individual_key])
 
-        best_normal_cell = ("normal", reduction_best_species.individuals[best_individual_key])
+
 
         first_block = [best_normal_cell] * REDUCTION_POS[0]
         second_block = [best_normal_cell] * REDUCTION_POS[0]
