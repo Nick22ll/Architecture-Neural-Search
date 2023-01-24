@@ -1,17 +1,7 @@
 import os
 import sys
 
-from matplotlib import pyplot as plt
-
 from Evolution import Evolution
-
-
-def pixel_histogram(np_image):
-    plt.hist(np_image.ravel(), bins=50, density=True)
-    plt.xlabel("pixel values")
-    plt.ylabel("relative frequency")
-    plt.title("distribution of pixels")
-    plt.show()
 
 
 CELL_NUMBER = 7

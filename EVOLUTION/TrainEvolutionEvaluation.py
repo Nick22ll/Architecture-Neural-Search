@@ -37,10 +37,17 @@ def main():
 
     new_cell_list = []
     for cell in network.operationList[:-1]:
+        op_list = []
+        for edge_idx, operation in cell.edge_operations_dict.items():
+            s = ""
+            for key, value in operation.items():
+                s += f"{key}${value}$"
+            op_list.append(s)
+
         if isinstance(cell, NormalCell):
-            new_cell_list.append(("normal", cell.edge_operations))
+            new_cell_list.append(("normal", op_list))
         else:
-            new_cell_list.append(("reduction", cell.edge_operations))
+            new_cell_list.append(("reduction", op_list))
 
     evaluateCellNetwork(new_cell_list, save_path, device)
 
